@@ -273,7 +273,7 @@ module Puma
           # spin up the max number of threads.
           return if busy_threads < @max
 
-          @not_full.wait @mutex
+          @not_full.wait @mutex, 0.05
         end
       end
     end

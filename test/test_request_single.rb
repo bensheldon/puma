@@ -629,6 +629,21 @@ class TestRequestHeadersInvalid < TestRequestBase
       "Invalid Host header",
       status: 400
   end
+
+  {
+    'duplicate_different' => "Host: a.com\r\nHost: b.com",
+    'duplicate_same'      => "Host: a.com\r\nHost: a.com",
+    'comma'               => "Host: a.com, b.com",
+    'userinfo'            => "Host: user@a.com:80",
+    'path'                => "Host: a.com:80/path",
+    'bad_port'            => "Host: a.com:8x",
+  }.each do |name, host|
+    define_method("test_invalid_host_#{name}_http11") do
+      assert_invalid "GET / HTTP/1.1\r\n#{host}\r\n\r\n",
+        "Invalid Host header",
+        status: 400
+    end
+  end
 end
 
 # Tests requests with invalid Content-Length header

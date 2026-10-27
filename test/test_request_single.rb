@@ -788,6 +788,62 @@ class TestRequestTransferEncodingInvalid < TestRequestBase
     assert_invalid "#{GET_PREFIX}#{te}\r\n\r\n#{CHUNKED}",
       "Invalid Transfer-Encoding, single value must be chunked: 'gzip'"
   end
+
+  def test_rejects_request_with_both_content_length_and_transfer_encoding
+    req = "POST / HTTP/1.1\r\nHost: test.com\r\n" \
+      "Transfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\n#{CHUNKED}"
+
+    error = assert_raises(Puma::HttpParserError) { create_client req }
+    assert_equal "Invalid Transfer-Encoding, request has both Transfer-Encoding and Content-Length", error.message
+    assert_equal 400, @client.error_status_code,
+      "Server MAY reject a request with both Content-Length and Transfer-Encoding; Puma responds 400 (RFC 9112 §6.1)"
+    assert_equal 'close', @client.env[HTTP_CONNECTION],
+      "Server MUST close the connection after responding to a request with both Content-Length and Transfer-Encoding (RFC 9112 §6.1)"
+  end
+
+  def test_rejects_empty_transfer_encoding_value
+    error = assert_raises(Puma::HttpParserError) { create_client "#{GET_PREFIX}Transfer-Encoding: \r\n\r\n" }
+    assert_equal "Invalid Transfer-Encoding, single value must be chunked: ''", error.message
+    refute_kind_of Puma::HttpParserError501, error,
+      "Transfer-Encoding needs at least one non-empty coding, so an empty value is a 400 bad request, not a 501 unknown coding (RFC 9112 §6.1, RFC 9110 §5.6.1)"
+  end
+end
+
+# Tests valid Transfer-Encoding header variations
+class TestRequestTransferEncodingValid < TestRequestBase
+
+  CASE_RULE = "Transfer-coding names are case-insensitive (RFC 9112 §7)"
+  EMPTY_ELEMENT_RULE = "Recipients MUST accept empty list elements, which do not count as elements (RFC 9110 §5.6.1)"
+
+  def assert_chunked_body(te, rule)
+    create_client "#{GET_PREFIX}Transfer-Encoding: #{te}\r\n\r\n#{CHUNKED}"
+    assert_equal 'HelloWorld', @client.env['rack.input'].read, rule
+  end
+
+  def test_transfer_coding_name_is_case_insensitive_lowercase
+    assert_chunked_body 'chunked', CASE_RULE
+  end
+
+  def test_transfer_coding_name_is_case_insensitive_capitalized
+    assert_chunked_body 'Chunked', CASE_RULE
+  end
+
+  def test_transfer_coding_name_is_case_insensitive_uppercase
+    assert_chunked_body 'CHUNKED', CASE_RULE
+  end
+
+  def test_ignores_leading_empty_list_element_in_transfer_encoding
+    assert_chunked_body ', chunked', EMPTY_ELEMENT_RULE
+  end
+
+  def test_ignores_trailing_empty_list_element_in_transfer_encoding
+    assert_chunked_body 'chunked,', EMPTY_ELEMENT_RULE
+  end
+
+  def test_ignores_trailing_whitespace_in_transfer_encoding
+    assert_chunked_body "chunked \t",
+      "Leading and trailing whitespace (SP / HTAB) is not part of a field value (RFC 9110 §5.5)"
+  end
 end
 
 # Tests reset clears per-request error state

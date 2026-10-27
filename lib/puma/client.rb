@@ -465,9 +465,16 @@ module Puma
 
       te = @env[TRANSFER_ENCODING2]
       if te
+        # RFC 9112 6.1: a request with both is a likely smuggling attempt
+        if @env.key?(CONTENT_LENGTH)
+          @error_status_code = 400
+          @env[HTTP_CONNECTION] = CLOSE
+          raise HttpParserError, "#{TE_ERR_MSG}, request has both Transfer-Encoding and Content-Length"
+        end
         te_lwr = te.downcase
         if te.include? ','
           te_ary = te_lwr.split(',').each { |te| te.gsub!(STRIP_OWS, "") }
+          te_ary.reject!(&:empty?)
           te_count = te_ary.count CHUNKED
           te_valid = te_ary[0..-2].all? { |e| ALLOWED_TRANSFER_ENCODING.include? e }
           if te_count > 1
@@ -479,10 +486,10 @@ module Puma
           end
           @env.delete TRANSFER_ENCODING2
           return setup_chunked_body parser_body
-        elsif te_lwr == CHUNKED
+        elsif te_lwr.gsub(STRIP_OWS, "") == CHUNKED
           @env.delete TRANSFER_ENCODING2
           return setup_chunked_body parser_body
-        elsif ALLOWED_TRANSFER_ENCODING.include? te_lwr
+        elsif te_lwr.strip.empty? || ALLOWED_TRANSFER_ENCODING.include?(te_lwr)
           raise HttpParserError     , "#{TE_ERR_MSG}, single value must be chunked: '#{te}'"
         else
           raise HttpParserError501  , "#{TE_ERR_MSG}, unknown value: '#{te}'"

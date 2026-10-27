@@ -128,12 +128,17 @@ class TestRequestLineValid < TestRequestBase
     assert_equal 'HTTP/1.0', @client.env[SERVER_PROTOCOL]
   end
 
-  def test_PROTOCOL_1_2
+  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
+  # Any HTTP/1.x minor version is accepted.
+  def test_accepts_http_1_x_minor_version
     create_client "GET / HTTP/1.2\r\nHost: test.com\r\n\r\n"
     assert_equal 'HTTP/1.2', @client.env[SERVER_PROTOCOL]
   end
 
-  def test_asterisk_with_options
+  # RFC 9112 §3.2.4: asterisk-form = "*"
+  # "The asterisk-form of request-target is only used for a server-wide
+  # OPTIONS request"
+  def test_accepts_asterisk_form_with_options
     create_client "OPTIONS * HTTP/1.1\r\nHost: test.com\r\n\r\n"
     assert_equal '*', @client.env[REQUEST_URI]
   end
@@ -212,37 +217,66 @@ class TestRequestLineInvalid < TestRequestBase
       "Invalid HTTP format, parsing fails. Bad protocol HTTP/1.a"
   end
 
-  def test_protocol_unsupported_version
+  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
+  # Puma only implements HTTP/1.x, so other major versions are rejected.
+  def test_rejects_unsupported_http_major_version
     assert_invalid "GET / HTTP/9.9\r\nHost: test.com\r\n\r\n",
       "Invalid HTTP format, parsing fails. Bad protocol HTTP/9.9"
   end
 
-  def test_protocol_leading_zeros
+  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
+  # Each version number is exactly one digit, so leading zeros are invalid.
+  def test_rejects_http_version_with_leading_zeros
     assert_invalid "GET / HTTP/01.01\r\nHost: test.com\r\n\r\n",
       "Invalid HTTP format, parsing fails. Bad protocol HTTP/01.01"
   end
 
-  def test_h2_preface
+  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
+  # A minor version has exactly one digit.
+  def test_rejects_http_version_with_multi_digit_minor
+    assert_invalid "GET / HTTP/1.10\r\nHost: test.com\r\n\r\n",
+      "Invalid HTTP format, parsing fails. Bad protocol HTTP/1.10"
+  end
+
+  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
+  # The HTTP/2 connection preface (RFC 9113 §3.4) is not an HTTP/1.x
+  # request-line and must be rejected, not treated as an unknown method.
+  def test_rejects_http2_connection_preface
     assert_invalid "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n",
       "Invalid HTTP format, parsing fails.", start_with: true
   end
 
-  def test_cr_only_line_ending
+  # RFC 9112 §2.2: "A sender MUST NOT generate a bare CR (a CR character
+  # not immediately followed by LF) within any protocol elements"
+  def test_rejects_bare_cr_line_ending
     assert_invalid "GET / HTTP/1.1\rHost: test.com\r\n\r\n",
       "Invalid HTTP format, parsing fails.", start_with: true
   end
 
-  def test_path_non_ascii
+  # RFC 3986 §2: a URI is composed of a limited set of ASCII characters;
+  # other octets must be percent-encoded.
+  def test_rejects_raw_non_ascii_bytes_in_path
     assert_invalid "GET /caf\xC3\xA9 HTTP/1.1\r\nHost: test.com\r\n\r\n".b,
       "Invalid HTTP format, parsing fails. Bad path", start_with: true
   end
 
-  def test_path_overlong_utf8
+  # RFC 3986 §2: a URI is composed of a limited set of ASCII characters;
+  # other octets must be percent-encoded.
+  def test_rejects_raw_non_ascii_bytes_in_query
+    assert_invalid "GET /?q=caf\xC3\xA9 HTTP/1.1\r\nHost: test.com\r\n\r\n".b,
+      "Invalid HTTP format, parsing fails. Bad query", start_with: true
+  end
+
+  # RFC 3986 §2: a URI is composed of a limited set of ASCII characters;
+  # other octets must be percent-encoded. This covers overlong UTF-8 too.
+  def test_rejects_raw_overlong_utf8_bytes_in_path
     assert_invalid "GET /\xC0\xAF HTTP/1.1\r\nHost: test.com\r\n\r\n".b,
       "Invalid HTTP format, parsing fails. Bad path", start_with: true
   end
 
-  def test_asterisk_with_get
+  # RFC 9112 §3.2.4: "The asterisk-form of request-target is only used for
+  # a server-wide OPTIONS request"
+  def test_rejects_asterisk_form_with_non_options_method
     assert_invalid "GET * HTTP/1.1\r\nHost: test.com\r\n\r\n",
       "Asterisk request-target is only allowed with OPTIONS", status: 400
   end

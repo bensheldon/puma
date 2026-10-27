@@ -2433,8 +2433,11 @@ class TestPumaServer < PumaTest
     assert_equal 2, response.scan("HTTP/1.1 200 OK").size
   end
 
-  # test that a request with both content-length and transfer-encoding is rejected
-  def test_cl_and_te_smuggle
+  # RFC 9112 §6.1: "A server MAY reject a request that contains both
+  # Content-Length and Transfer-Encoding ... Regardless, the server MUST close
+  # the connection after responding to such a request". The smuggled GET in
+  # the body must never reach the app.
+  def test_rejects_request_with_both_content_length_and_transfer_encoding_and_closes_connection
     body = nil
     server_run { |env|
       body = env['rack.input'].read

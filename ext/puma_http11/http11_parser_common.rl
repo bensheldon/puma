@@ -12,7 +12,8 @@
   extra = ("!" | "*" | "'" | "(" | ")" | ",");
   reserved = (";" | "/" | "?" | ":" | "@" | "&" | "=" | "+");
   unsafe = (CTL | " " | "\"" | "#" | "%" | "<" | ">");
-  national = any -- (alpha | digit | reserved | extra | safe | unsafe);
+  # Raw non-ASCII bytes are not allowed in the request-target (RFC 3986).
+  national = ascii -- (alpha | digit | reserved | extra | safe | unsafe);
   unreserved = (alpha | digit | safe | extra | national);
   escape = ("%" xdigit xdigit);
   uchar = (unreserved | escape | "%");
@@ -40,7 +41,7 @@
   Fragment = ( uchar | reserved )* >mark %fragment;
   Method = ( upper | digit | safe ){1,20} >mark %request_method;
 
-  http_number = ( digit+ "." digit+ ) ;
+  http_number = ( "1." digit ) ;
   Server_Protocol = ( "HTTP/" http_number ) >mark %server_protocol ;
   Request_Line = ( Method " " Request_URI ("#" Fragment){0,1} " " Server_Protocol CRLF ) ;
 

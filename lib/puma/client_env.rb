@@ -13,6 +13,12 @@ module Puma
     include Puma::Const
 
     def validate_env
+      if @env[REQUEST_URI] == "*" && @env[REQUEST_METHOD] != "OPTIONS"
+        @error_status_code = 400
+        @env[HTTP_CONNECTION] = CLOSE
+        raise HttpParserError, "Asterisk request-target is only allowed with OPTIONS"
+      end
+
       return unless @env[SERVER_PROTOCOL] == HTTP_11
 
       unless @env.key? HTTP_HOST

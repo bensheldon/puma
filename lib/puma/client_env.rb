@@ -12,6 +12,12 @@ module Puma
 
     include Puma::Const
 
+    # RFC 3986 `host [":" port]`: an IP-literal or a reg-name/IPv4address.
+    # Commas are excluded from reg-name since the parsers join duplicate Host
+    # headers with ", ", and a list of hosts is ambiguous (RFC 9110 7.2).
+    VALID_HOST = /\A(?:\[[0-9A-Za-z.:_~!$&'()*+;=-]+\]|[0-9A-Za-z.\-_~!$&'()*+;=%]+)(?::\d*)?\z/
+    private_constant :VALID_HOST
+
     def validate_env
       return unless @env[SERVER_PROTOCOL] == HTTP_11
 
@@ -21,7 +27,7 @@ module Puma
         raise HttpParserError, "Missing Host header"
       end
 
-      if @env[HTTP_HOST].empty?
+      unless VALID_HOST.match?(@env[HTTP_HOST])
         @error_status_code = 400
         @env[HTTP_CONNECTION] = CLOSE
         raise HttpParserError, "Invalid Host header"

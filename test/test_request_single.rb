@@ -49,8 +49,8 @@ class TestRequestBase < PumaTest
     end
   end
 
-  def assert_invalid(req, msg, err: Puma::HttpParserError, status: nil, start_with: false, &blk)
-    error = assert_raises(err) { create_client req, &blk }
+  def assert_invalid(req, msg, err: Puma::HttpParserError, status: nil, start_with: false, rule: nil, &blk)
+    error = assert_raises(*[err, rule].compact) { create_client req, &blk }
 
     if start_with
       assert_start_with error.message, msg
@@ -60,7 +60,7 @@ class TestRequestBase < PumaTest
     assert_equal 'close', @client.env[HTTP_CONNECTION],
       "env['HTTP_CONNECTION'] should be set to 'close'"
     if status
-      assert_equal(status, @client.error_status_code)
+      assert_equal(status, @client.error_status_code, rule)
       if status == 413
         assert @client.http_content_length_limit_exceeded
       end
@@ -612,22 +612,78 @@ class TestRequestHeadersInvalid < TestRequestBase
     assert_invalid request, msg
   end
 
-  def test_missing_host_http11
+  def test_rejects_http11_request_without_host_header
     assert_invalid "GET / HTTP/1.1\r\n\r\n",
       "Missing Host header",
-      status: 400
+      status: 400, rule: "Server MUST reject an HTTP/1.1 request that lacks a Host header (RFC 9112 §3.2)"
   end
 
-  def test_empty_host_http11
+  def test_rejects_http11_request_with_empty_host_header
     assert_invalid "GET / HTTP/1.1\r\nHost:\r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Server MUST reject a Host header with an empty, invalid field value (RFC 9112 §3.2, RFC 9110 §7.2)"
   end
 
-  def test_whitespace_host_http11
+  def test_rejects_http11_request_with_whitespace_only_host_header
     assert_invalid "GET / HTTP/1.1\r\nHost: \r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Server MUST reject a Host header whose value is only whitespace (RFC 9112 §3.2, RFC 9110 §7.2)"
+  end
+
+  def test_rejects_request_with_multiple_host_headers
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com\r\nHost: b.com\r\n\r\n",
+      "Invalid Host header",
+      status: 400, rule: "Server MUST reject a request with more than one Host header (RFC 9112 §3.2)"
+  end
+
+  def test_rejects_request_with_multiple_identical_host_headers
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com\r\nHost: a.com\r\n\r\n",
+      "Invalid Host header",
+      status: 400, rule: "Server MUST reject a request with more than one Host header, even with identical values (RFC 9112 §3.2)"
+  end
+
+  def test_rejects_host_header_with_comma_separated_list
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com, b.com\r\n\r\n",
+      "Invalid Host header",
+      status: 400, rule: "Host value MUST be a single uri-host [\":\" port], not a list (RFC 9110 §7.2, RFC 9112 §3.2)"
+  end
+
+  def test_rejects_host_header_with_userinfo
+    assert_invalid "GET / HTTP/1.1\r\nHost: user@a.com:80\r\n\r\n",
+      "Invalid Host header",
+      status: 400, rule: "Host value MUST exclude userinfo and its \"@\" delimiter (RFC 9110 §7.2)"
+  end
+
+  def test_rejects_host_header_with_path
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com:80/path\r\n\r\n",
+      "Invalid Host header",
+      status: 400, rule: "Host value MUST be host [\":\" port] with no path (RFC 3986 §3.2.2)"
+  end
+
+  def test_rejects_host_header_with_non_numeric_port
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com:8x\r\n\r\n",
+      "Invalid Host header",
+      status: 400, rule: "Host port MUST be *DIGIT (RFC 3986 §3.2.3)"
+  end
+
+  def test_rejects_host_header_with_embedded_whitespace
+    assert_invalid "GET / HTTP/1.1\r\nHost: a .com\r\n\r\n",
+      "Invalid Host header",
+      status: 400, rule: "Host reg-name MUST NOT contain whitespace (RFC 3986 §3.2.2)"
+  end
+
+  def test_rejects_host_header_with_non_ascii_bytes
+    assert_invalid "GET / HTTP/1.1\r\nHost: caf\xC3\xA9.com\r\n\r\n".b,
+      "Invalid Host header",
+      status: 400, rule: "Host reg-name MUST be ASCII; raw non-ASCII bytes are invalid (RFC 3986 §3.2.2, RFC 9110 §7.2)"
+  end
+
+  def test_accepts_valid_host_header_forms
+    ["a.com", "a.com:8080", "127.0.0.1:80", "[::1]", "[::1]:8080", "a.com:"].each do |host|
+      create_client "GET / HTTP/1.1\r\nHost: #{host}\r\n\r\n"
+      assert_equal host, @client.env[HTTP_HOST], "Server MUST accept Host #{host.inspect}: host = IP-literal / IPv4address / reg-name [\":\" port] (RFC 3986 §3.2.2, §3.2.3)"
+      teardown
+    end
   end
 end
 

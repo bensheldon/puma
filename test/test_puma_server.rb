@@ -1130,7 +1130,7 @@ class TestPumaServer < PumaTest
       [200, {}, [""]]
     }
 
-    header = "GET / HTTP/1.1\r\nHost: test.com\r\nConnection: close\r\nContent-Length: 200\r\nTransfer-Encoding: chunked\r\n\r\n"
+    header = "GET / HTTP/1.1\r\nHost: test.com\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n"
 
     chunk_header_size = 6 # 4fb8\r\n
     # Current implementation reads one chunk of CHUNK_SIZE, then more chunks of size 4096.
@@ -1161,7 +1161,7 @@ class TestPumaServer < PumaTest
     max_chunk_header_size = Puma::Client::MAX_CHUNK_HEADER_SIZE
 
     # send valid request except for extension_header larger than limit
-    header = "GET / HTTP/1.1\r\nHost: test.com\r\nConnection: close\r\nContent-Length: 200\r\nTransfer-Encoding: chunked\r\n\r\n"
+    header = "GET / HTTP/1.1\r\nHost: test.com\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n"
     response = send_http_read_response "#{header}1;t=#{'x' * (max_chunk_header_size + 2)}\r\n1\r\nh\r\n4\r\nello\r\n0\r\n\r\n"
 
     assert_equal "HTTP/1.1 400 Bad Request\r\nconnection: close\r\ncontent-length: 0\r\n\r\n", response
@@ -2433,8 +2433,7 @@ class TestPumaServer < PumaTest
     assert_equal 2, response.scan("HTTP/1.1 200 OK").size
   end
 
-  # test to check if content-length is ignored when 'transfer-encoding: chunked'
-  # is used.  See also test_large_chunked_request
+  # test that a request with both content-length and transfer-encoding is rejected
   def test_cl_and_te_smuggle
     body = nil
     server_run { |env|
@@ -2462,9 +2461,9 @@ class TestPumaServer < PumaTest
 
     response = send_http_read_response req
 
-    assert_includes body, "GET /404 HTTP/1.1\r\n"
-    assert_includes body, "Content-Length: 144\r\n"
-    assert_equal 1, response.scan("HTTP/1.1 200 OK").size
+    assert_nil body
+    assert_start_with response, "HTTP/1.1 400 Bad Request\r\nconnection: close\r\n"
+    assert_equal 1, response.scan("HTTP/1.1 ").size
   end
 
   queue_request_options = [true, false]

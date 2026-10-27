@@ -788,6 +788,40 @@ class TestRequestTransferEncodingInvalid < TestRequestBase
     assert_invalid "#{GET_PREFIX}#{te}\r\n\r\n#{CHUNKED}",
       "Invalid Transfer-Encoding, single value must be chunked: 'gzip'"
   end
+
+  def test_with_content_length
+    req = "POST / HTTP/1.1\r\nHost: test.com\r\n" \
+      "Transfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\n#{CHUNKED}"
+
+    assert_invalid req,
+      "Invalid Transfer-Encoding, request has both Transfer-Encoding and Content-Length",
+      status: 400
+  end
+
+  def test_empty_value
+    te = 'Transfer-Encoding: '
+
+    assert_invalid "#{GET_PREFIX}#{te}\r\n\r\n",
+      "Invalid Transfer-Encoding, single value must be chunked: ''"
+  end
+end
+
+# Tests valid Transfer-Encoding header variations
+class TestRequestTransferEncodingValid < TestRequestBase
+
+  %w[chunked Chunked CHUNKED].each do |te|
+    define_method(:"test_case_insensitive_#{te}") do
+      create_client "#{GET_PREFIX}Transfer-Encoding: #{te}\r\n\r\n#{CHUNKED}"
+      assert_equal 'HelloWorld', @client.env['rack.input'].read
+    end
+  end
+
+  { leading_comma: ', chunked', trailing_comma: 'chunked,', trailing_space: "chunked \t" }.each do |name, te|
+    define_method(:"test_#{name}") do
+      create_client "#{GET_PREFIX}Transfer-Encoding: #{te}\r\n\r\n#{CHUNKED}"
+      assert_equal 'HelloWorld', @client.env['rack.input'].read
+    end
+  end
 end
 
 # Tests reset clears per-request error state

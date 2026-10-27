@@ -55,7 +55,7 @@ jobs:
 
       - name: start puma
         run: |
-          ruby -Ilib bin/puma -b tcp://127.0.0.1:$PORT -t 4:4 test/rackup/http11probe.ru > puma.log 2>&1 &
+          bundle exec ruby -Ilib bin/puma -b tcp://127.0.0.1:$PORT -t 4:4 test/rackup/http11probe.ru > puma.log 2>&1 &
           for i in $(seq 50); do
             curl -sf http://127.0.0.1:$PORT/ > /dev/null && exit 0
             sleep 0.2

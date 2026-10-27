@@ -345,7 +345,11 @@ class TestRequestHeadersValid < TestRequestBase
     assert_equal 'Transfer-EncodingPuma TestTransfer-Encoding', @client.env['rack.input'].read
   end
 
-  def test_content_chunked_extensions
+  # RFC 9112 7.1.1: chunk-ext = *( BWS ";" BWS chunk-ext-name [ BWS "=" BWS chunk-ext-val ] )
+  #                 chunk-ext-val = token / quoted-string
+  # RFC 9112 7.1.2: trailer-section = *( field-line CRLF )
+  # Well-formed extensions and trailers are accepted and ignored.
+  def test_accepts_valid_chunk_ext_and_trailer_section
     request = "GET / HTTP/1.1\r\nHost: test.com\r\nTransfer-Encoding: chunked\r\n\r\n" \
       "5;a\r\nhello\r\n5;a=b;c=\"d \\\" e\"\r\nworld\r\n0;z=1\r\nX-Trailer: 1\r\n\r\n"
 
@@ -746,42 +750,92 @@ class TestRequestChunkedInvalid < TestRequestBase
       "Chunk size cannot be empty or nil"
   end
 
-  def test_chunked_size_leading_space
+  # RFC 9112 7.1: chunk-size = 1*HEXDIG
+  # No whitespace is permitted before the chunk size.
+  def test_rejects_chunk_size_with_leading_whitespace
     assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
       " 5\r\nhello\r\n0\r\n\r\n",
       "Invalid chunk size: ' 5'"
   end
 
-  def test_chunked_size_trailing_space
+  # RFC 9112 7.1: chunk = chunk-size [ chunk-ext ] CRLF chunk-data CRLF
+  # Only chunk-ext may follow chunk-size, so trailing whitespace is invalid.
+  def test_rejects_chunk_size_with_trailing_whitespace
     assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
       "5 \r\nhello\r\n0\r\n\r\n",
       "Invalid chunk size: '5 '"
   end
 
-  def test_chunked_size_overflow
+  # RFC 9112 7.1: "Recipients MUST anticipate potentially large hexadecimal
+  # numerals and prevent parsing errors due to integer conversion overflows"
+  def test_rejects_chunk_size_that_overflows
     assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
       "FFFFFFFFFFFFFFFF0\r\nhello\r\n0\r\n\r\n",
       "Chunk size too large: 'FFFFFFFFFFFFFFFF0'"
   end
 
-  def test_chunked_ext_invalid
-    ["5;", "5;bad[=x", "5;\x00ext", "5;a\rX", "5;a=", "5;a=\"x", "5;a =b"].each do |size_line|
-      assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
-        "#{size_line}\r\nhello\r\n0\r\n\r\n",
-        "Invalid chunk extension"
-    end
+  # RFC 9112 7.1.1: chunk-ext = *( BWS ";" BWS chunk-ext-name [ BWS "=" BWS chunk-ext-val ] )
+  #                 chunk-ext-name = token
+  # A ";" must be followed by a non-empty token.
+  def test_rejects_chunk_ext_without_name
+    assert_invalid_chunk_ext "5;"
   end
 
-  def test_chunked_size_line_bare_lf
+  # RFC 9110 5.6.2: token = 1*tchar; "[" is a delimiter, not a tchar.
+  def test_rejects_chunk_ext_name_with_non_token_character
+    assert_invalid_chunk_ext "5;bad[=x"
+  end
+
+  # RFC 9110 5.6.2: tchar excludes CTLs, so NUL cannot appear in a chunk-ext-name.
+  def test_rejects_chunk_ext_with_nul
+    assert_invalid_chunk_ext "5;\x00ext"
+  end
+
+  # RFC 9110 5.6.2: tchar excludes CTLs, so a bare CR cannot appear in chunk-ext.
+  def test_rejects_chunk_ext_with_bare_cr
+    assert_invalid_chunk_ext "5;a\rX"
+  end
+
+  # RFC 9112 7.1.1: chunk-ext-val = token / quoted-string
+  # "=" must be followed by a value.
+  def test_rejects_chunk_ext_with_empty_value
+    assert_invalid_chunk_ext "5;a="
+  end
+
+  # RFC 9110 5.6.4: quoted-string = DQUOTE *( qdtext / quoted-pair ) DQUOTE
+  def test_rejects_chunk_ext_with_unterminated_quoted_string
+    assert_invalid_chunk_ext "5;a=\"x"
+  end
+
+  # RFC 9112 7.1.1 grammar permits BWS around ";" and "=", but BWS is deprecated
+  # (RFC 9110 5.6.3) and a known request smuggling vector, so Puma rejects it.
+  def test_rejects_chunk_ext_with_whitespace_around_equals
+    assert_invalid_chunk_ext "5;a =b"
+  end
+
+  # RFC 9112 7.1: chunk = chunk-size [ chunk-ext ] CRLF chunk-data CRLF
+  # The chunk-size line must end with CRLF, not a bare LF.
+  def test_rejects_chunk_size_line_ending_in_bare_lf
     assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
       "5;\nhello\r\n0\r\n\r\n",
       "Chunk size line must end with CRLF"
   end
 
-  def test_chunked_trailer_bare_lf
+  # RFC 9112 7.1: chunked-body = *chunk last-chunk trailer-section CRLF
+  #               trailer-section = *( field-line CRLF )
+  # The chunked body must end with CRLF, not a bare LF.
+  def test_rejects_trailer_section_ending_in_bare_lf
     assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
       "5\r\nhello\r\n0\r\n\n",
       "Chunked trailer lines must end with CRLF"
+  end
+
+  private
+
+  def assert_invalid_chunk_ext(size_line)
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "#{size_line}\r\nhello\r\n0\r\n\r\n",
+      "Invalid chunk extension"
   end
 end
 

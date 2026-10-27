@@ -49,8 +49,8 @@ class TestRequestBase < PumaTest
     end
   end
 
-  def assert_invalid(req, msg, err: Puma::HttpParserError, status: nil, start_with: false, &blk)
-    error = assert_raises(err) { create_client req, &blk }
+  def assert_invalid(req, msg, err: Puma::HttpParserError, status: nil, start_with: false, rule: nil, &blk)
+    error = assert_raises(err, rule) { create_client req, &blk }
 
     if start_with
       assert_start_with error.message, msg
@@ -60,7 +60,7 @@ class TestRequestBase < PumaTest
     assert_equal 'close', @client.env[HTTP_CONNECTION],
       "env['HTTP_CONNECTION'] should be set to 'close'"
     if status
-      assert_equal(status, @client.error_status_code)
+      assert_equal(status, @client.error_status_code, rule)
       if status == 413
         assert @client.http_content_length_limit_exceeded
       end
@@ -612,102 +612,76 @@ class TestRequestHeadersInvalid < TestRequestBase
     assert_invalid request, msg
   end
 
-  # RFC 9112 §3.2: "A server MUST respond with a 400 (Bad Request) status code
-  # to any HTTP/1.1 request message that lacks a Host header field".
   def test_rejects_http11_request_without_host_header
     assert_invalid "GET / HTTP/1.1\r\n\r\n",
       "Missing Host header",
-      status: 400
+      status: 400, rule: "Server MUST reject an HTTP/1.1 request that lacks a Host header (RFC 9112 §3.2)"
   end
 
-  # RFC 9112 §3.2: a Host header field "with an invalid field value" gets a 400;
-  # an empty value is not a valid uri-host (RFC 9110 §7.2).
   def test_rejects_http11_request_with_empty_host_header
     assert_invalid "GET / HTTP/1.1\r\nHost:\r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Server MUST reject a Host header with an empty, invalid field value (RFC 9112 §3.2, RFC 9110 §7.2)"
   end
 
-  # RFC 9112 §3.2 / RFC 9110 §7.2: a whitespace-only Host value is an empty,
-  # invalid field value once optional whitespace is stripped.
   def test_rejects_http11_request_with_whitespace_only_host_header
     assert_invalid "GET / HTTP/1.1\r\nHost: \r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Server MUST reject a Host header whose value is only whitespace (RFC 9112 §3.2, RFC 9110 §7.2)"
   end
 
-  # RFC 9112 §3.2: "A server MUST respond with a 400 (Bad Request) status code
-  # to any HTTP/1.1 request message that lacks a Host header field and to any
-  # request message that contains more than one Host header field line or a
-  # Host header field with an invalid field value."
   def test_rejects_request_with_multiple_host_headers
     assert_invalid "GET / HTTP/1.1\r\nHost: a.com\r\nHost: b.com\r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Server MUST reject a request with more than one Host header (RFC 9112 §3.2)"
   end
 
-  # RFC 9112 §3.2: "more than one Host header field line" is rejected even
-  # when the repeated lines carry the same value.
   def test_rejects_request_with_multiple_identical_host_headers
     assert_invalid "GET / HTTP/1.1\r\nHost: a.com\r\nHost: a.com\r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Server MUST reject a request with more than one Host header, even with identical values (RFC 9112 §3.2)"
   end
 
-  # RFC 9110 §7.2: Host = uri-host [ ":" port ], a single authority, so a
-  # comma-separated list of hosts is an invalid field value (RFC 9112 §3.2).
   def test_rejects_host_header_with_comma_separated_list
     assert_invalid "GET / HTTP/1.1\r\nHost: a.com, b.com\r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Host value MUST be a single uri-host [\":\" port], not a list (RFC 9110 §7.2, RFC 9112 §3.2)"
   end
 
-  # RFC 9110 §7.2: the Host field value is the "authority component, excluding
-  # any userinfo subcomponent and its "@" delimiter".
   def test_rejects_host_header_with_userinfo
     assert_invalid "GET / HTTP/1.1\r\nHost: user@a.com:80\r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Host value MUST exclude userinfo and its \"@\" delimiter (RFC 9110 §7.2)"
   end
 
-  # RFC 3986 §3.2.2: host = IP-literal / IPv4address / reg-name, followed only
-  # by an optional ":" port, so a "/" path is not allowed.
   def test_rejects_host_header_with_path
     assert_invalid "GET / HTTP/1.1\r\nHost: a.com:80/path\r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Host value MUST be host [\":\" port] with no path (RFC 3986 §3.2.2)"
   end
 
-  # RFC 3986 §3.2.3: port = *DIGIT
   def test_rejects_host_header_with_non_numeric_port
     assert_invalid "GET / HTTP/1.1\r\nHost: a.com:8x\r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Host port MUST be *DIGIT (RFC 3986 §3.2.3)"
   end
 
-  # RFC 3986 §3.2.2: reg-name = *( unreserved / pct-encoded / sub-delims ),
-  # which excludes whitespace inside the host.
   def test_rejects_host_header_with_embedded_whitespace
     assert_invalid "GET / HTTP/1.1\r\nHost: a .com\r\n\r\n",
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Host reg-name MUST NOT contain whitespace (RFC 3986 §3.2.2)"
   end
 
-  # RFC 3986 §3.2.2: reg-name = *( unreserved / pct-encoded / sub-delims ), all
-  # ASCII; RFC 9110 §7.2 takes uri-host from that grammar, so raw non-ASCII bytes
-  # (e.g. an un-punycoded IDN) are an invalid field value.
   def test_rejects_host_header_with_non_ascii_bytes
     assert_invalid "GET / HTTP/1.1\r\nHost: caf\xC3\xA9.com\r\n\r\n".b,
       "Invalid Host header",
-      status: 400
+      status: 400, rule: "Host reg-name MUST be ASCII; raw non-ASCII bytes are invalid (RFC 3986 §3.2.2, RFC 9110 §7.2)"
   end
 
-  # RFC 3986 §3.2.2 / §3.2.3: host [ ":" port ] accepts a reg-name, an IPv4
-  # address and a bracketed IP-literal, each with an optional port.
   def test_accepts_valid_host_header_forms
     ["a.com", "a.com:8080", "127.0.0.1:80", "[::1]", "[::1]:8080", "a.com:"].each do |host|
       create_client "GET / HTTP/1.1\r\nHost: #{host}\r\n\r\n"
-      assert_equal host, @client.env[HTTP_HOST]
+      assert_equal host, @client.env[HTTP_HOST], "Server MUST accept Host #{host.inspect}: host = IP-literal / IPv4address / reg-name [\":\" port] (RFC 3986 §3.2.2, §3.2.3)"
       teardown
     end
   end

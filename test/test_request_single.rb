@@ -49,8 +49,8 @@ class TestRequestBase < PumaTest
     end
   end
 
-  def assert_invalid(req, msg, err: Puma::HttpParserError, status: nil, start_with: false, &blk)
-    error = assert_raises(err) { create_client req, &blk }
+  def assert_invalid(req, msg, err: Puma::HttpParserError, status: nil, start_with: false, rule: nil, &blk)
+    error = assert_raises(*[err, rule].compact) { create_client req, &blk }
 
     if start_with
       assert_start_with error.message, msg
@@ -60,7 +60,7 @@ class TestRequestBase < PumaTest
     assert_equal 'close', @client.env[HTTP_CONNECTION],
       "env['HTTP_CONNECTION'] should be set to 'close'"
     if status
-      assert_equal(status, @client.error_status_code)
+      assert_equal(status, @client.error_status_code, rule)
       if status == 413
         assert @client.http_content_length_limit_exceeded
       end
@@ -128,19 +128,16 @@ class TestRequestLineValid < TestRequestBase
     assert_equal 'HTTP/1.0', @client.env[SERVER_PROTOCOL]
   end
 
-  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
-  # Any HTTP/1.x minor version is accepted.
   def test_accepts_http_1_x_minor_version
     create_client "GET / HTTP/1.2\r\nHost: test.com\r\n\r\n"
-    assert_equal 'HTTP/1.2', @client.env[SERVER_PROTOCOL]
+    assert_equal 'HTTP/1.2', @client.env[SERVER_PROTOCOL],
+      "Any HTTP/1.x minor version MUST be accepted (RFC 9112 §2.3)"
   end
 
-  # RFC 9112 §3.2.4: asterisk-form = "*"
-  # "The asterisk-form of request-target is only used for a server-wide
-  # OPTIONS request"
   def test_accepts_asterisk_form_with_options
     create_client "OPTIONS * HTTP/1.1\r\nHost: test.com\r\n\r\n"
-    assert_equal '*', @client.env[REQUEST_URI]
+    assert_equal '*', @client.env[REQUEST_URI],
+      "asterisk-form MUST be accepted with OPTIONS (RFC 9112 §3.2.4)"
   end
 
   def test_PROTOCOL_1_1
@@ -217,68 +214,58 @@ class TestRequestLineInvalid < TestRequestBase
       "Invalid HTTP format, parsing fails. Bad protocol HTTP/1.a"
   end
 
-  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
-  # Puma only implements HTTP/1.x, so other major versions are rejected.
   def test_rejects_unsupported_http_major_version
     assert_invalid "GET / HTTP/9.9\r\nHost: test.com\r\n\r\n",
-      "Invalid HTTP format, parsing fails. Bad protocol HTTP/9.9"
+      "Invalid HTTP format, parsing fails. Bad protocol HTTP/9.9",
+      rule: "Only HTTP/1.x versions are supported (RFC 9112 §2.3)"
   end
 
-  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
-  # Each version number is exactly one digit, so leading zeros are invalid.
   def test_rejects_http_version_with_leading_zeros
     assert_invalid "GET / HTTP/01.01\r\nHost: test.com\r\n\r\n",
-      "Invalid HTTP format, parsing fails. Bad protocol HTTP/01.01"
+      "Invalid HTTP format, parsing fails. Bad protocol HTTP/01.01",
+      rule: "HTTP-version MUST be a single DIGIT on each side of the dot (RFC 9112 §2.3)"
   end
 
-  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
-  # A minor version has exactly one digit.
   def test_rejects_http_version_with_multi_digit_minor
     assert_invalid "GET / HTTP/1.10\r\nHost: test.com\r\n\r\n",
-      "Invalid HTTP format, parsing fails. Bad protocol HTTP/1.10"
+      "Invalid HTTP format, parsing fails. Bad protocol HTTP/1.10",
+      rule: "HTTP-version MUST be a single DIGIT on each side of the dot (RFC 9112 §2.3)"
   end
 
-  # RFC 9112 §2.3: HTTP-version = HTTP-name "/" DIGIT "." DIGIT
-  # The HTTP/2 connection preface (RFC 9113 §3.4) is not an HTTP/1.x
-  # request-line and must be rejected, not treated as an unknown method.
   def test_rejects_http2_connection_preface
     assert_invalid "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n",
-      "Invalid HTTP format, parsing fails.", start_with: true
+      "Invalid HTTP format, parsing fails.", start_with: true,
+      rule: "The HTTP/2 preface is not a valid HTTP/1.x request-line (RFC 9112 §2.3)"
   end
 
-  # RFC 9112 §2.2: "A sender MUST NOT generate a bare CR (a CR character
-  # not immediately followed by LF) within any protocol elements"
   def test_rejects_bare_cr_line_ending
     assert_invalid "GET / HTTP/1.1\rHost: test.com\r\n\r\n",
-      "Invalid HTTP format, parsing fails.", start_with: true
+      "Invalid HTTP format, parsing fails.", start_with: true,
+      rule: "A bare CR MUST NOT be used as a line ending (RFC 9112 §2.2)"
   end
 
-  # RFC 3986 §2: a URI is composed of a limited set of ASCII characters;
-  # other octets must be percent-encoded.
   def test_rejects_raw_non_ascii_bytes_in_path
     assert_invalid "GET /caf\xC3\xA9 HTTP/1.1\r\nHost: test.com\r\n\r\n".b,
-      "Invalid HTTP format, parsing fails. Bad path", start_with: true
+      "Invalid HTTP format, parsing fails. Bad path", start_with: true,
+      rule: "Non-ASCII octets in the request-target MUST be percent-encoded (RFC 3986 §2)"
   end
 
-  # RFC 3986 §2: a URI is composed of a limited set of ASCII characters;
-  # other octets must be percent-encoded.
   def test_rejects_raw_non_ascii_bytes_in_query
     assert_invalid "GET /?q=caf\xC3\xA9 HTTP/1.1\r\nHost: test.com\r\n\r\n".b,
-      "Invalid HTTP format, parsing fails. Bad query", start_with: true
+      "Invalid HTTP format, parsing fails. Bad query", start_with: true,
+      rule: "Non-ASCII octets in the request-target MUST be percent-encoded (RFC 3986 §2)"
   end
 
-  # RFC 3986 §2: a URI is composed of a limited set of ASCII characters;
-  # other octets must be percent-encoded. This covers overlong UTF-8 too.
   def test_rejects_raw_overlong_utf8_bytes_in_path
     assert_invalid "GET /\xC0\xAF HTTP/1.1\r\nHost: test.com\r\n\r\n".b,
-      "Invalid HTTP format, parsing fails. Bad path", start_with: true
+      "Invalid HTTP format, parsing fails. Bad path", start_with: true,
+      rule: "Non-ASCII octets in the request-target MUST be percent-encoded (RFC 3986 §2)"
   end
 
-  # RFC 9112 §3.2.4: "The asterisk-form of request-target is only used for
-  # a server-wide OPTIONS request"
   def test_rejects_asterisk_form_with_non_options_method
     assert_invalid "GET * HTTP/1.1\r\nHost: test.com\r\n\r\n",
-      "Asterisk request-target is only allowed with OPTIONS", status: 400
+      "Asterisk request-target is only allowed with OPTIONS", status: 400,
+      rule: "asterisk-form is only allowed with OPTIONS (RFC 9112 §3.2.4)"
   end
 end
 

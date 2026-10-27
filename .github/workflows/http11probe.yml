@@ -1,0 +1,84 @@
+name: http11probe
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+env:
+  HTTP11PROBE_REF: d50d818a0e008e9feb3bb9860ad5d9cc40342bc3
+  PORT: 8080
+
+jobs:
+  skip_duplicate_runs:
+    uses: ./.github/workflows/skip_duplicate_workflow_runs.yml
+
+  http11probe:
+    name: Http11Probe HTTP/1.1 compliance
+    needs: skip_duplicate_runs
+    runs-on: ubuntu-24.04
+    if: |
+      !(   contains(github.event.pull_request.title,  '[ci skip]')
+        || contains(github.event.pull_request.title,  '[skip ci]')
+        || (needs.skip_duplicate_runs.outputs.should_skip == 'true'))
+    timeout-minutes: 20
+
+    steps:
+      - name: checkout puma
+        uses: actions/checkout@v4
+
+      - name: load ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+        timeout-minutes: 10
+
+      - name: compile
+        run: bundle exec rake compile
+
+      - name: checkout Http11Probe
+        uses: actions/checkout@v4
+        with:
+          repository: MDA2AV/Http11Probe
+          ref: ${{ env.HTTP11PROBE_REF }}
+          path: http11probe
+
+      - name: load dotnet
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: build Http11Probe
+        working-directory: http11probe
+        run: dotnet build src/Http11Probe.Cli -c Release
+
+      - name: start puma
+        run: |
+          ruby -Ilib bin/puma -b tcp://127.0.0.1:$PORT -t 4:4 test/rackup/http11probe.ru > puma.log 2>&1 &
+          for i in $(seq 50); do
+            curl -sf http://127.0.0.1:$PORT/ > /dev/null && exit 0
+            sleep 0.2
+          done
+          cat puma.log
+          exit 1
+
+      - name: run Http11Probe
+        working-directory: http11probe
+        run: >-
+          dotnet run --no-build --project src/Http11Probe.Cli -c Release --
+          --host 127.0.0.1 --port $PORT --output "$GITHUB_WORKSPACE/results.json"
+          || true
+
+      - name: check results against known failures
+        run: ruby .github/http11probe/check.rb results.json
+
+      - name: upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: http11probe-results
+          path: |
+            results.json
+            puma.log
+          if-no-files-found: warn

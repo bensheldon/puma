@@ -49,13 +49,13 @@ class TestRequestBase < PumaTest
     end
   end
 
-  def assert_invalid(req, msg, err: Puma::HttpParserError, status: nil, start_with: false, &blk)
-    error = assert_raises(err) { create_client req, &blk }
+  def assert_invalid(req, msg, err: Puma::HttpParserError, status: nil, start_with: false, rule: nil, &blk)
+    error = assert_raises(err, *rule) { create_client req, &blk }
 
     if start_with
       assert_start_with error.message, msg
     else
-      assert_equal msg, error.message
+      assert_equal msg, error.message, rule
     end
     assert_equal 'close', @client.env[HTTP_CONNECTION],
       "env['HTTP_CONNECTION'] should be set to 'close'"
@@ -343,6 +343,16 @@ class TestRequestHeadersValid < TestRequestBase
     refute_operator @client.env, :key?, TRANSFER_ENCODING2
     assert_equal '43', @client.env[CONTENT_LENGTH]
     assert_equal 'Transfer-EncodingPuma TestTransfer-Encoding', @client.env['rack.input'].read
+  end
+
+  def test_accepts_valid_chunk_ext_and_trailer_section
+    request = "GET / HTTP/1.1\r\nHost: test.com\r\nTransfer-Encoding: chunked\r\n\r\n" \
+      "5;a\r\nhello\r\n5;a=b;c=\"d \\\" e\"\r\nworld\r\n0;z=1\r\nX-Trailer: 1\r\n\r\n"
+
+    create_client request
+
+    assert_equal 'helloworld', @client.env['rack.input'].read,
+      "valid chunk-ext and trailer-section MUST be accepted (RFC 9112 §7.1.1, §7.1.2)"
   end
 
   # if a header with an underscore exists, and is a singular key,  accept it
@@ -735,6 +745,78 @@ class TestRequestChunkedInvalid < TestRequestBase
 
     assert_invalid "#{GET_PREFIX}#{te}\r\n\r\n#{chunked}",
       "Chunk size cannot be empty or nil"
+  end
+
+  def test_rejects_chunk_size_with_leading_whitespace
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      " 5\r\nhello\r\n0\r\n\r\n",
+      "Invalid chunk size: ' 5'",
+      rule: "chunk-size MUST NOT have leading whitespace (RFC 9112 §7.1)"
+  end
+
+  def test_rejects_chunk_size_with_trailing_whitespace
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "5 \r\nhello\r\n0\r\n\r\n",
+      "Invalid chunk size: '5 '",
+      rule: "chunk-size MUST NOT have trailing whitespace (RFC 9112 §7.1)"
+  end
+
+  def test_rejects_chunk_size_that_overflows
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "FFFFFFFFFFFFFFFF0\r\nhello\r\n0\r\n\r\n",
+      "Chunk size too large: 'FFFFFFFFFFFFFFFF0'",
+      rule: "chunk-size that overflows MUST be rejected (RFC 9112 §7.1)"
+  end
+
+  def test_rejects_chunk_ext_without_name
+    assert_invalid_chunk_ext "5;", "chunk-ext-name MUST be a non-empty token after \";\" (RFC 9112 §7.1.1)"
+  end
+
+  def test_rejects_chunk_ext_name_with_non_token_character
+    assert_invalid_chunk_ext "5;bad[=x", "chunk-ext-name MUST be a token; \"[\" is not a tchar (RFC 9112 §7.1.1)"
+  end
+
+  def test_rejects_chunk_ext_with_nul
+    assert_invalid_chunk_ext "5;\x00ext", "chunk-ext MUST NOT contain NUL (RFC 9112 §7.1.1)"
+  end
+
+  def test_rejects_chunk_ext_with_bare_cr
+    assert_invalid_chunk_ext "5;a\rX", "chunk-ext MUST NOT contain bare CR (RFC 9112 §7.1.1)"
+  end
+
+  def test_rejects_chunk_ext_with_empty_value
+    assert_invalid_chunk_ext "5;a=", "chunk-ext-val MUST be a token or quoted-string after \"=\" (RFC 9112 §7.1.1)"
+  end
+
+  def test_rejects_chunk_ext_with_unterminated_quoted_string
+    assert_invalid_chunk_ext "5;a=\"x", "chunk-ext-val quoted-string MUST be terminated (RFC 9112 §7.1.1)"
+  end
+
+  def test_rejects_chunk_ext_with_whitespace_around_equals
+    assert_invalid_chunk_ext "5;a =b", "chunk-ext MUST NOT contain whitespace around \"=\" (Puma rejects deprecated BWS, RFC 9112 §7.1.1)"
+  end
+
+  def test_rejects_chunk_size_line_ending_in_bare_lf
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "5;\nhello\r\n0\r\n\r\n",
+      "Chunk size line must end with CRLF",
+      rule: "chunk-size line MUST end with CRLF, not bare LF (RFC 9112 §7.1)"
+  end
+
+  def test_rejects_trailer_section_ending_in_bare_lf
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "5\r\nhello\r\n0\r\n\n",
+      "Chunked trailer lines must end with CRLF",
+      rule: "trailer-section MUST end with CRLF, not bare LF (RFC 9112 §7.1.2)"
+  end
+
+  private
+
+  def assert_invalid_chunk_ext(size_line, rule)
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "#{size_line}\r\nhello\r\n0\r\n\r\n",
+      "Invalid chunk extension",
+      rule: rule
   end
 end
 

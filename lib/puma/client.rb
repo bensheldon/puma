@@ -455,8 +455,11 @@ module Puma
         if @continue_callback && (response = @continue_callback.call(@env))
           reject_continue response
         end
-        @io << HTTP_11_100
-        @io.flush
+        # RFC 9110 §15.2: a server must not send a 1xx response to an HTTP/1.0 client
+        unless @env[SERVER_PROTOCOL] == HTTP_10
+          @io << HTTP_11_100
+          @io.flush
+        end
       end
 
       @read_header = false

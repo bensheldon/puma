@@ -1062,6 +1062,15 @@ class TestPumaServer < PumaTest
     assert_equal 0, calls
   end
 
+  def test_does_not_send_100_continue_to_http_1_0_client
+    server_run { [200, {}, [""]] }
+
+    response = send_http_read_response "GET / HTTP/1.0\r\nExpect: 100-continue\r\n\r\n"
+
+    refute_includes response, "100 Continue", "Server MUST NOT send a 1xx response to an HTTP/1.0 client (RFC 9110 §15.2)"
+    assert_equal "HTTP/1.0 200 OK\r\ncontent-length: 0\r\n\r\n", response
+  end
+
   def test_chunked_request
     body = nil
     content_length = nil

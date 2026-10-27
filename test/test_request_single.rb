@@ -612,19 +612,25 @@ class TestRequestHeadersInvalid < TestRequestBase
     assert_invalid request, msg
   end
 
-  def test_missing_host_http11
+  # RFC 9112 §3.2: "A server MUST respond with a 400 (Bad Request) status code
+  # to any HTTP/1.1 request message that lacks a Host header field".
+  def test_rejects_http11_request_without_host_header
     assert_invalid "GET / HTTP/1.1\r\n\r\n",
       "Missing Host header",
       status: 400
   end
 
-  def test_empty_host_http11
+  # RFC 9112 §3.2: a Host header field "with an invalid field value" gets a 400;
+  # an empty value is not a valid uri-host (RFC 9110 §7.2).
+  def test_rejects_http11_request_with_empty_host_header
     assert_invalid "GET / HTTP/1.1\r\nHost:\r\n\r\n",
       "Invalid Host header",
       status: 400
   end
 
-  def test_whitespace_host_http11
+  # RFC 9112 §3.2 / RFC 9110 §7.2: a whitespace-only Host value is an empty,
+  # invalid field value once optional whitespace is stripped.
+  def test_rejects_http11_request_with_whitespace_only_host_header
     assert_invalid "GET / HTTP/1.1\r\nHost: \r\n\r\n",
       "Invalid Host header",
       status: 400
@@ -683,6 +689,15 @@ class TestRequestHeadersInvalid < TestRequestBase
   # which excludes whitespace inside the host.
   def test_rejects_host_header_with_embedded_whitespace
     assert_invalid "GET / HTTP/1.1\r\nHost: a .com\r\n\r\n",
+      "Invalid Host header",
+      status: 400
+  end
+
+  # RFC 3986 §3.2.2: reg-name = *( unreserved / pct-encoded / sub-delims ), all
+  # ASCII; RFC 9110 §7.2 takes uri-host from that grammar, so raw non-ASCII bytes
+  # (e.g. an un-punycoded IDN) are an invalid field value.
+  def test_rejects_host_header_with_non_ascii_bytes
+    assert_invalid "GET / HTTP/1.1\r\nHost: caf\xC3\xA9.com\r\n\r\n".b,
       "Invalid Host header",
       status: 400
   end

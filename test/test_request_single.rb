@@ -345,6 +345,15 @@ class TestRequestHeadersValid < TestRequestBase
     assert_equal 'Transfer-EncodingPuma TestTransfer-Encoding', @client.env['rack.input'].read
   end
 
+  def test_content_chunked_extensions
+    request = "GET / HTTP/1.1\r\nHost: test.com\r\nTransfer-Encoding: chunked\r\n\r\n" \
+      "5;a\r\nhello\r\n5;a=b;c=\"d \\\" e\"\r\nworld\r\n0;z=1\r\nX-Trailer: 1\r\n\r\n"
+
+    create_client request
+
+    assert_equal 'helloworld', @client.env['rack.input'].read
+  end
+
   # if a header with an underscore exists, and is a singular key,  accept it
   def test_underscore_single
     request = "GET / HTTP/1.1\r\nHost: test.com\r\n" \
@@ -735,6 +744,44 @@ class TestRequestChunkedInvalid < TestRequestBase
 
     assert_invalid "#{GET_PREFIX}#{te}\r\n\r\n#{chunked}",
       "Chunk size cannot be empty or nil"
+  end
+
+  def test_chunked_size_leading_space
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      " 5\r\nhello\r\n0\r\n\r\n",
+      "Invalid chunk size: ' 5'"
+  end
+
+  def test_chunked_size_trailing_space
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "5 \r\nhello\r\n0\r\n\r\n",
+      "Invalid chunk size: '5 '"
+  end
+
+  def test_chunked_size_overflow
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "FFFFFFFFFFFFFFFF0\r\nhello\r\n0\r\n\r\n",
+      "Chunk size too large: 'FFFFFFFFFFFFFFFF0'"
+  end
+
+  def test_chunked_ext_invalid
+    ["5;", "5;bad[=x", "5;\x00ext", "5;a\rX", "5;a=", "5;a=\"x", "5;a =b"].each do |size_line|
+      assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+        "#{size_line}\r\nhello\r\n0\r\n\r\n",
+        "Invalid chunk extension"
+    end
+  end
+
+  def test_chunked_size_line_bare_lf
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "5;\nhello\r\n0\r\n\r\n",
+      "Chunk size line must end with CRLF"
+  end
+
+  def test_chunked_trailer_bare_lf
+    assert_invalid "#{GET_PREFIX}Transfer-Encoding: chunked\r\n\r\n" \
+      "5\r\nhello\r\n0\r\n\n",
+      "Chunked trailer lines must end with CRLF"
   end
 end
 

@@ -59,6 +59,12 @@ module Puma
 
     # chunked body validation
     CHUNK_SIZE_VALID = /\A\h+\z/.freeze
+    # chunk-ext per RFC 9112 7.1.1: *( ";" token [ "=" ( token / quoted-string ) ] )
+    # BWS is not accepted.
+    CHUNK_EXT_VALID = /\A(?:;[!#$%&'*+\-.^_`|~0-9A-Za-z]+(?:=(?:[!#$%&'*+\-.^_`|~0-9A-Za-z]+|"(?:[\t !#-\[\]-~\x80-\xFF]|\\[\t -~\x80-\xFF])*"))?)*\z/n.freeze
+    # Chunk sizes larger than this are rejected (and avoid Bignum sizes)
+    MAX_CHUNK_SIZE_BITS = 62
+    BARE_LF = /(?<!\r)\n/.freeze
     CHUNK_VALID_ENDING = Const::LINE_END
     CHUNK_VALID_ENDING_SIZE = CHUNK_VALID_ENDING.bytesize
 
@@ -679,9 +685,10 @@ module Puma
       while !io.eof?
         line = io.gets
         if line.end_with?(CHUNK_VALID_ENDING)
-          # Puma doesn't process chunk extensions, but should parse if they're
-          # present, which is the reason for the semicolon regex
-          chunk_hex = line.strip[/\A[^;]+/]
+          # Puma doesn't process chunk extensions, but validates their syntax.
+          # No whitespace is allowed around the chunk size.
+          chunk_line = line.byteslice(0, line.bytesize - CHUNK_VALID_ENDING_SIZE)
+          chunk_hex = chunk_line[/\A[^;]*/n]
           unless CHUNK_SIZE_VALID.match? chunk_hex
             err_msg = chunk_hex && !chunk_hex.empty? ?
               "Invalid chunk size: '#{chunk_hex}'" :
@@ -689,7 +696,15 @@ module Puma
             raise HttpParserError, err_msg
           end
 
+          unless CHUNK_EXT_VALID.match? chunk_line.byteslice(chunk_hex.bytesize..-1)
+            raise HttpParserError, "Invalid chunk extension"
+          end
+
           len = chunk_hex.to_i(16)
+          if len.bit_length > MAX_CHUNK_SIZE_BITS
+            raise HttpParserError, "Chunk size too large: '#{chunk_hex}'"
+          end
+
           if len == 0
             @in_last_chunk = true
             @body.rewind
@@ -736,6 +751,8 @@ module Puma
             write_chunk(part[0..-2])
             @partial_part_left = len - part.size
           end
+        elsif line.end_with?(NEWLINE)
+          raise HttpParserError, "Chunk size line must end with CRLF"
         else
           if @prev_chunk.size + line.size >= MAX_CHUNK_HEADER_SIZE
             raise HttpParserError, "maximum size of chunk header exceeded"
@@ -759,8 +776,13 @@ module Puma
       elsif idx = rest.index(CHUNK_VALID_ENDING * 2)
         trailer_end = idx + CHUNK_VALID_ENDING_SIZE * 2
       else
+        raise HttpParserError, "Chunked trailer lines must end with CRLF" if BARE_LF.match?(rest)
         @prev_chunk = rest
         return false
+      end
+
+      if BARE_LF.match?(rest.byteslice(0, trailer_end))
+        raise HttpParserError, "Chunked trailer lines must end with CRLF"
       end
 
       @prev_chunk = ""

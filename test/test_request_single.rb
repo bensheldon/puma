@@ -630,18 +630,70 @@ class TestRequestHeadersInvalid < TestRequestBase
       status: 400
   end
 
-  {
-    'duplicate_different' => "Host: a.com\r\nHost: b.com",
-    'duplicate_same'      => "Host: a.com\r\nHost: a.com",
-    'comma'               => "Host: a.com, b.com",
-    'userinfo'            => "Host: user@a.com:80",
-    'path'                => "Host: a.com:80/path",
-    'bad_port'            => "Host: a.com:8x",
-  }.each do |name, host|
-    define_method("test_invalid_host_#{name}_http11") do
-      assert_invalid "GET / HTTP/1.1\r\n#{host}\r\n\r\n",
-        "Invalid Host header",
-        status: 400
+  # RFC 9112 §3.2: "A server MUST respond with a 400 (Bad Request) status code
+  # to any HTTP/1.1 request message that lacks a Host header field and to any
+  # request message that contains more than one Host header field line or a
+  # Host header field with an invalid field value."
+  def test_rejects_request_with_multiple_host_headers
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com\r\nHost: b.com\r\n\r\n",
+      "Invalid Host header",
+      status: 400
+  end
+
+  # RFC 9112 §3.2: "more than one Host header field line" is rejected even
+  # when the repeated lines carry the same value.
+  def test_rejects_request_with_multiple_identical_host_headers
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com\r\nHost: a.com\r\n\r\n",
+      "Invalid Host header",
+      status: 400
+  end
+
+  # RFC 9110 §7.2: Host = uri-host [ ":" port ], a single authority, so a
+  # comma-separated list of hosts is an invalid field value (RFC 9112 §3.2).
+  def test_rejects_host_header_with_comma_separated_list
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com, b.com\r\n\r\n",
+      "Invalid Host header",
+      status: 400
+  end
+
+  # RFC 9110 §7.2: the Host field value is the "authority component, excluding
+  # any userinfo subcomponent and its "@" delimiter".
+  def test_rejects_host_header_with_userinfo
+    assert_invalid "GET / HTTP/1.1\r\nHost: user@a.com:80\r\n\r\n",
+      "Invalid Host header",
+      status: 400
+  end
+
+  # RFC 3986 §3.2.2: host = IP-literal / IPv4address / reg-name, followed only
+  # by an optional ":" port, so a "/" path is not allowed.
+  def test_rejects_host_header_with_path
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com:80/path\r\n\r\n",
+      "Invalid Host header",
+      status: 400
+  end
+
+  # RFC 3986 §3.2.3: port = *DIGIT
+  def test_rejects_host_header_with_non_numeric_port
+    assert_invalid "GET / HTTP/1.1\r\nHost: a.com:8x\r\n\r\n",
+      "Invalid Host header",
+      status: 400
+  end
+
+  # RFC 3986 §3.2.2: reg-name = *( unreserved / pct-encoded / sub-delims ),
+  # which excludes whitespace inside the host.
+  def test_rejects_host_header_with_embedded_whitespace
+    assert_invalid "GET / HTTP/1.1\r\nHost: a .com\r\n\r\n",
+      "Invalid Host header",
+      status: 400
+  end
+
+  # RFC 3986 §3.2.2 / §3.2.3: host [ ":" port ] accepts a reg-name, an IPv4
+  # address and a bracketed IP-literal, each with an optional port.
+  def test_accepts_valid_host_header_forms
+    ["a.com", "a.com:8080", "127.0.0.1:80", "[::1]", "[::1]:8080", "a.com:"].each do |host|
+      create_client "GET / HTTP/1.1\r\nHost: #{host}\r\n\r\n"
+      assert_equal host, @client.env[HTTP_HOST]
+      teardown
     end
   end
 end

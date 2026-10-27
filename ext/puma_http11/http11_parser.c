@@ -89,6 +89,7 @@ size_t puma_parser_execute(puma_parser *parser, const char *buffer, size_t len, 
 		goto _test_eof;
 	switch ( cs )
 	{
+	/* fall through */
 case 1:
 	switch( (*p) ) {
 		case 36: goto tr0;
@@ -113,8 +114,9 @@ tr0:
 st2:
 	if ( ++p == pe )
 		goto _test_eof2;
+	/* fall through */
 case 2:
-#line 118 "ext/puma_http11/http11_parser.c"
+#line 120 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
 		case 32: goto tr2;
 		case 36: goto st27;
@@ -138,8 +140,9 @@ tr2:
 st3:
 	if ( ++p == pe )
 		goto _test_eof3;
+	/* fall through */
 case 3:
-#line 143 "ext/puma_http11/http11_parser.c"
+#line 146 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
 		case 42: goto tr4;
 		case 43: goto tr5;
@@ -162,8 +165,9 @@ tr4:
 st4:
 	if ( ++p == pe )
 		goto _test_eof4;
+	/* fall through */
 case 4:
-#line 167 "ext/puma_http11/http11_parser.c"
+#line 171 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
 		case 32: goto tr8;
 		case 35: goto tr9;
@@ -175,7 +179,7 @@ tr8:
     parser->request_uri(parser, PTR_TO(mark), LEN(mark, p));
   }
 	goto st5;
-tr31:
+tr30:
 #line 37 "ext/puma_http11/http11_parser.rl"
 	{ MARK(mark, p); }
 #line 56 "ext/puma_http11/http11_parser.rl"
@@ -183,13 +187,13 @@ tr31:
     parser->fragment(parser, PTR_TO(mark), LEN(mark, p));
   }
 	goto st5;
-tr33:
+tr32:
 #line 56 "ext/puma_http11/http11_parser.rl"
 	{
     parser->fragment(parser, PTR_TO(mark), LEN(mark, p));
   }
 	goto st5;
-tr37:
+tr36:
 #line 69 "ext/puma_http11/http11_parser.rl"
 	{
     parser->request_path(parser, PTR_TO(mark), LEN(mark,p));
@@ -199,7 +203,7 @@ tr37:
     parser->request_uri(parser, PTR_TO(mark), LEN(mark, p));
   }
 	goto st5;
-tr41:
+tr40:
 #line 60 "ext/puma_http11/http11_parser.rl"
 	{ MARK(query_start, p); }
 #line 61 "ext/puma_http11/http11_parser.rl"
@@ -211,7 +215,7 @@ tr41:
     parser->request_uri(parser, PTR_TO(mark), LEN(mark, p));
   }
 	goto st5;
-tr44:
+tr43:
 #line 61 "ext/puma_http11/http11_parser.rl"
 	{
     parser->query_string(parser, PTR_TO(query_start), LEN(query_start, p));
@@ -224,8 +228,9 @@ tr44:
 st5:
 	if ( ++p == pe )
 		goto _test_eof5;
+	/* fall through */
 case 5:
-#line 229 "ext/puma_http11/http11_parser.c"
+#line 234 "ext/puma_http11/http11_parser.c"
 	if ( (*p) == 72 )
 		goto tr10;
 	goto st0;
@@ -236,14 +241,16 @@ tr10:
 st6:
 	if ( ++p == pe )
 		goto _test_eof6;
+	/* fall through */
 case 6:
-#line 241 "ext/puma_http11/http11_parser.c"
+#line 247 "ext/puma_http11/http11_parser.c"
 	if ( (*p) == 84 )
 		goto st7;
 	goto st0;
 st7:
 	if ( ++p == pe )
 		goto _test_eof7;
+	/* fall through */
 case 7:
 	if ( (*p) == 84 )
 		goto st8;
@@ -251,6 +258,7 @@ case 7:
 st8:
 	if ( ++p == pe )
 		goto _test_eof8;
+	/* fall through */
 case 8:
 	if ( (*p) == 80 )
 		goto st9;
@@ -258,6 +266,7 @@ case 8:
 st9:
 	if ( ++p == pe )
 		goto _test_eof9;
+	/* fall through */
 case 9:
 	if ( (*p) == 47 )
 		goto st10;
@@ -265,22 +274,23 @@ case 9:
 st10:
 	if ( ++p == pe )
 		goto _test_eof10;
+	/* fall through */
 case 10:
-	if ( 48 <= (*p) && (*p) <= 57 )
+	if ( (*p) == 49 )
 		goto st11;
 	goto st0;
 st11:
 	if ( ++p == pe )
 		goto _test_eof11;
+	/* fall through */
 case 11:
 	if ( (*p) == 46 )
 		goto st12;
-	if ( 48 <= (*p) && (*p) <= 57 )
-		goto st11;
 	goto st0;
 st12:
 	if ( ++p == pe )
 		goto _test_eof12;
+	/* fall through */
 case 12:
 	if ( 48 <= (*p) && (*p) <= 57 )
 		goto st13;
@@ -288,11 +298,10 @@ case 12:
 st13:
 	if ( ++p == pe )
 		goto _test_eof13;
+	/* fall through */
 case 13:
 	if ( (*p) == 13 )
 		goto tr18;
-	if ( 48 <= (*p) && (*p) <= 57 )
-		goto st13;
 	goto st0;
 tr18:
 #line 65 "ext/puma_http11/http11_parser.rl"
@@ -317,14 +326,16 @@ tr29:
 st14:
 	if ( ++p == pe )
 		goto _test_eof14;
+	/* fall through */
 case 14:
-#line 322 "ext/puma_http11/http11_parser.c"
+#line 332 "ext/puma_http11/http11_parser.c"
 	if ( (*p) == 10 )
 		goto st15;
 	goto st0;
 st15:
 	if ( ++p == pe )
 		goto _test_eof15;
+	/* fall through */
 case 15:
 	switch( (*p) ) {
 		case 13: goto st16;
@@ -353,6 +364,7 @@ case 15:
 st16:
 	if ( ++p == pe )
 		goto _test_eof16;
+	/* fall through */
 case 16:
 	if ( (*p) == 10 )
 		goto tr22;
@@ -368,8 +380,9 @@ tr22:
 st46:
 	if ( ++p == pe )
 		goto _test_eof46;
+	/* fall through */
 case 46:
-#line 373 "ext/puma_http11/http11_parser.c"
+#line 386 "ext/puma_http11/http11_parser.c"
 	goto st0;
 tr21:
 #line 40 "ext/puma_http11/http11_parser.rl"
@@ -384,8 +397,9 @@ tr23:
 st17:
 	if ( ++p == pe )
 		goto _test_eof17;
+	/* fall through */
 case 17:
-#line 389 "ext/puma_http11/http11_parser.c"
+#line 403 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
 		case 33: goto tr23;
 		case 58: goto tr24;
@@ -423,8 +437,9 @@ tr27:
 st18:
 	if ( ++p == pe )
 		goto _test_eof18;
+	/* fall through */
 case 18:
-#line 428 "ext/puma_http11/http11_parser.c"
+#line 443 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
 		case 13: goto tr26;
 		case 32: goto tr27;
@@ -443,8 +458,9 @@ tr25:
 st19:
 	if ( ++p == pe )
 		goto _test_eof19;
+	/* fall through */
 case 19:
-#line 448 "ext/puma_http11/http11_parser.c"
+#line 464 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
 		case 13: goto tr29;
 		case 127: goto st0;
@@ -496,41 +512,41 @@ tr45:
 st20:
 	if ( ++p == pe )
 		goto _test_eof20;
+	/* fall through */
 case 20:
-#line 501 "ext/puma_http11/http11_parser.c"
+#line 518 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
-		case 32: goto tr31;
-		case 60: goto st0;
-		case 62: goto st0;
-		case 127: goto st0;
+		case 32: goto tr30;
+		case 33: goto tr31;
+		case 61: goto tr31;
 	}
-	if ( (*p) > 31 ) {
-		if ( 34 <= (*p) && (*p) <= 35 )
-			goto st0;
-	} else if ( (*p) >= 0 )
-		goto st0;
-	goto tr30;
-tr30:
+	if ( (*p) > 59 ) {
+		if ( 63 <= (*p) && (*p) <= 126 )
+			goto tr31;
+	} else if ( (*p) >= 36 )
+		goto tr31;
+	goto st0;
+tr31:
 #line 37 "ext/puma_http11/http11_parser.rl"
 	{ MARK(mark, p); }
 	goto st21;
 st21:
 	if ( ++p == pe )
 		goto _test_eof21;
+	/* fall through */
 case 21:
-#line 522 "ext/puma_http11/http11_parser.c"
+#line 539 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
-		case 32: goto tr33;
-		case 60: goto st0;
-		case 62: goto st0;
-		case 127: goto st0;
+		case 32: goto tr32;
+		case 33: goto st21;
+		case 61: goto st21;
 	}
-	if ( (*p) > 31 ) {
-		if ( 34 <= (*p) && (*p) <= 35 )
-			goto st0;
-	} else if ( (*p) >= 0 )
-		goto st0;
-	goto st21;
+	if ( (*p) > 59 ) {
+		if ( 63 <= (*p) && (*p) <= 126 )
+			goto st21;
+	} else if ( (*p) >= 36 )
+		goto st21;
+	goto st0;
 tr5:
 #line 37 "ext/puma_http11/http11_parser.rl"
 	{ MARK(mark, p); }
@@ -538,8 +554,9 @@ tr5:
 st22:
 	if ( ++p == pe )
 		goto _test_eof22;
+	/* fall through */
 case 22:
-#line 543 "ext/puma_http11/http11_parser.c"
+#line 560 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
 		case 43: goto st22;
 		case 58: goto st23;
@@ -563,19 +580,21 @@ tr7:
 st23:
 	if ( ++p == pe )
 		goto _test_eof23;
+	/* fall through */
 case 23:
-#line 568 "ext/puma_http11/http11_parser.c"
+#line 586 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
 		case 32: goto tr8;
-		case 34: goto st0;
+		case 33: goto st23;
 		case 35: goto tr9;
-		case 60: goto st0;
-		case 62: goto st0;
-		case 127: goto st0;
+		case 61: goto st23;
 	}
-	if ( 0 <= (*p) && (*p) <= 31 )
-		goto st0;
-	goto st23;
+	if ( (*p) > 59 ) {
+		if ( 63 <= (*p) && (*p) <= 126 )
+			goto st23;
+	} else if ( (*p) >= 36 )
+		goto st23;
+	goto st0;
 tr6:
 #line 37 "ext/puma_http11/http11_parser.rl"
 	{ MARK(mark, p); }
@@ -583,24 +602,30 @@ tr6:
 st24:
 	if ( ++p == pe )
 		goto _test_eof24;
+	/* fall through */
 case 24:
-#line 588 "ext/puma_http11/http11_parser.c"
+#line 608 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
-		case 32: goto tr37;
-		case 34: goto st0;
+		case 32: goto tr36;
+		case 33: goto st24;
 		case 35: goto tr38;
-		case 60: goto st0;
-		case 62: goto st0;
+		case 61: goto st24;
 		case 63: goto tr39;
-		case 92: goto st0;
-		case 96: goto st0;
-		case 123: goto st0;
-		case 125: goto st0;
-		case 127: goto st0;
+		case 124: goto st24;
+		case 126: goto st24;
 	}
-	if ( 0 <= (*p) && (*p) <= 31 )
-		goto st0;
-	goto st24;
+	if ( (*p) < 64 ) {
+		if ( 36 <= (*p) && (*p) <= 59 )
+			goto st24;
+	} else if ( (*p) > 91 ) {
+		if ( (*p) > 95 ) {
+			if ( 97 <= (*p) && (*p) <= 122 )
+				goto st24;
+		} else if ( (*p) >= 93 )
+			goto st24;
+	} else
+		goto st24;
+	goto st0;
 tr39:
 #line 69 "ext/puma_http11/http11_parser.rl"
 	{
@@ -610,42 +635,47 @@ tr39:
 st25:
 	if ( ++p == pe )
 		goto _test_eof25;
+	/* fall through */
 case 25:
-#line 615 "ext/puma_http11/http11_parser.c"
+#line 641 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
-		case 32: goto tr41;
-		case 34: goto st0;
+		case 32: goto tr40;
+		case 33: goto tr41;
 		case 35: goto tr42;
-		case 60: goto st0;
-		case 62: goto st0;
-		case 127: goto st0;
+		case 61: goto tr41;
 	}
-	if ( 0 <= (*p) && (*p) <= 31 )
-		goto st0;
-	goto tr40;
-tr40:
+	if ( (*p) > 59 ) {
+		if ( 63 <= (*p) && (*p) <= 126 )
+			goto tr41;
+	} else if ( (*p) >= 36 )
+		goto tr41;
+	goto st0;
+tr41:
 #line 60 "ext/puma_http11/http11_parser.rl"
 	{ MARK(query_start, p); }
 	goto st26;
 st26:
 	if ( ++p == pe )
 		goto _test_eof26;
+	/* fall through */
 case 26:
-#line 635 "ext/puma_http11/http11_parser.c"
+#line 663 "ext/puma_http11/http11_parser.c"
 	switch( (*p) ) {
-		case 32: goto tr44;
-		case 34: goto st0;
+		case 32: goto tr43;
+		case 33: goto st26;
 		case 35: goto tr45;
-		case 60: goto st0;
-		case 62: goto st0;
-		case 127: goto st0;
+		case 61: goto st26;
 	}
-	if ( 0 <= (*p) && (*p) <= 31 )
-		goto st0;
-	goto st26;
+	if ( (*p) > 59 ) {
+		if ( 63 <= (*p) && (*p) <= 126 )
+			goto st26;
+	} else if ( (*p) >= 36 )
+		goto st26;
+	goto st0;
 st27:
 	if ( ++p == pe )
 		goto _test_eof27;
+	/* fall through */
 case 27:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -664,6 +694,7 @@ case 27:
 st28:
 	if ( ++p == pe )
 		goto _test_eof28;
+	/* fall through */
 case 28:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -682,6 +713,7 @@ case 28:
 st29:
 	if ( ++p == pe )
 		goto _test_eof29;
+	/* fall through */
 case 29:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -700,6 +732,7 @@ case 29:
 st30:
 	if ( ++p == pe )
 		goto _test_eof30;
+	/* fall through */
 case 30:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -718,6 +751,7 @@ case 30:
 st31:
 	if ( ++p == pe )
 		goto _test_eof31;
+	/* fall through */
 case 31:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -736,6 +770,7 @@ case 31:
 st32:
 	if ( ++p == pe )
 		goto _test_eof32;
+	/* fall through */
 case 32:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -754,6 +789,7 @@ case 32:
 st33:
 	if ( ++p == pe )
 		goto _test_eof33;
+	/* fall through */
 case 33:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -772,6 +808,7 @@ case 33:
 st34:
 	if ( ++p == pe )
 		goto _test_eof34;
+	/* fall through */
 case 34:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -790,6 +827,7 @@ case 34:
 st35:
 	if ( ++p == pe )
 		goto _test_eof35;
+	/* fall through */
 case 35:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -808,6 +846,7 @@ case 35:
 st36:
 	if ( ++p == pe )
 		goto _test_eof36;
+	/* fall through */
 case 36:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -826,6 +865,7 @@ case 36:
 st37:
 	if ( ++p == pe )
 		goto _test_eof37;
+	/* fall through */
 case 37:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -844,6 +884,7 @@ case 37:
 st38:
 	if ( ++p == pe )
 		goto _test_eof38;
+	/* fall through */
 case 38:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -862,6 +903,7 @@ case 38:
 st39:
 	if ( ++p == pe )
 		goto _test_eof39;
+	/* fall through */
 case 39:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -880,6 +922,7 @@ case 39:
 st40:
 	if ( ++p == pe )
 		goto _test_eof40;
+	/* fall through */
 case 40:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -898,6 +941,7 @@ case 40:
 st41:
 	if ( ++p == pe )
 		goto _test_eof41;
+	/* fall through */
 case 41:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -916,6 +960,7 @@ case 41:
 st42:
 	if ( ++p == pe )
 		goto _test_eof42;
+	/* fall through */
 case 42:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -934,6 +979,7 @@ case 42:
 st43:
 	if ( ++p == pe )
 		goto _test_eof43;
+	/* fall through */
 case 43:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -952,6 +998,7 @@ case 43:
 st44:
 	if ( ++p == pe )
 		goto _test_eof44;
+	/* fall through */
 case 44:
 	switch( (*p) ) {
 		case 32: goto tr2;
@@ -970,6 +1017,7 @@ case 44:
 st45:
 	if ( ++p == pe )
 		goto _test_eof45;
+	/* fall through */
 case 45:
 	if ( (*p) == 32 )
 		goto tr2;

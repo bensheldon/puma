@@ -128,6 +128,16 @@ class TestRequestLineValid < TestRequestBase
     assert_equal 'HTTP/1.0', @client.env[SERVER_PROTOCOL]
   end
 
+  def test_PROTOCOL_1_2
+    create_client "GET / HTTP/1.2\r\nHost: test.com\r\n\r\n"
+    assert_equal 'HTTP/1.2', @client.env[SERVER_PROTOCOL]
+  end
+
+  def test_asterisk_with_options
+    create_client "OPTIONS * HTTP/1.1\r\nHost: test.com\r\n\r\n"
+    assert_equal '*', @client.env[REQUEST_URI]
+  end
+
   def test_PROTOCOL_1_1
     create_client "GET /puma/request?query=books&sort=price&order=asc HTTP/1.1\r\nHost: test.com\r\n\r\n"
 
@@ -200,6 +210,41 @@ class TestRequestLineInvalid < TestRequestBase
   def test_protocol_suffix
     assert_invalid "GET /test?a=1 HTTP/1.a\r\n\r\n",
       "Invalid HTTP format, parsing fails. Bad protocol HTTP/1.a"
+  end
+
+  def test_protocol_unsupported_version
+    assert_invalid "GET / HTTP/9.9\r\nHost: test.com\r\n\r\n",
+      "Invalid HTTP format, parsing fails. Bad protocol HTTP/9.9"
+  end
+
+  def test_protocol_leading_zeros
+    assert_invalid "GET / HTTP/01.01\r\nHost: test.com\r\n\r\n",
+      "Invalid HTTP format, parsing fails. Bad protocol HTTP/01.01"
+  end
+
+  def test_h2_preface
+    assert_invalid "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n",
+      "Invalid HTTP format, parsing fails.", start_with: true
+  end
+
+  def test_cr_only_line_ending
+    assert_invalid "GET / HTTP/1.1\rHost: test.com\r\n\r\n",
+      "Invalid HTTP format, parsing fails.", start_with: true
+  end
+
+  def test_path_non_ascii
+    assert_invalid "GET /caf\xC3\xA9 HTTP/1.1\r\nHost: test.com\r\n\r\n".b,
+      "Invalid HTTP format, parsing fails. Bad path", start_with: true
+  end
+
+  def test_path_overlong_utf8
+    assert_invalid "GET /\xC0\xAF HTTP/1.1\r\nHost: test.com\r\n\r\n".b,
+      "Invalid HTTP format, parsing fails. Bad path", start_with: true
+  end
+
+  def test_asterisk_with_get
+    assert_invalid "GET * HTTP/1.1\r\nHost: test.com\r\n\r\n",
+      "Asterisk request-target is only allowed with OPTIONS", status: 400
   end
 end
 

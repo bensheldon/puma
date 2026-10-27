@@ -50,7 +50,7 @@ class TestRequestBase < PumaTest
   end
 
   def assert_invalid(req, msg, err: Puma::HttpParserError, status: nil, start_with: false, rule: nil, &blk)
-    error = assert_raises(err, rule) { create_client req, &blk }
+    error = assert_raises(*[err, rule].compact) { create_client req, &blk }
 
     if start_with
       assert_start_with error.message, msg
